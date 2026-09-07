@@ -1,0 +1,50 @@
+name: Jesse V0.1 Smoke Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare environment
+        run: cp .env.example .env
+
+      - name: Validate Docker Compose
+        working-directory: docker
+        run: docker compose config
+
+      - name: Pull Jesse stack
+        working-directory: docker
+        run: docker compose pull
+
+      - name: Start Jesse stack
+        working-directory: docker
+        run: docker compose up -d
+
+      - name: Wait for dashboard
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:9000/ >/dev/null; then
+              echo "Jesse dashboard is responding."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Jesse dashboard did not become ready."
+          docker compose -f docker/docker-compose.yml logs --no-color jesse
+          exit 1
+
+      - name: Verify services
+        run: docker compose -f docker/docker-compose.yml ps
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker/docker-compose.yml down -v
